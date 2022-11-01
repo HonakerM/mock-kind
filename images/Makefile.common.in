@@ -34,6 +34,8 @@ EXTRA_BUILD_OPT?=
 build: ensure-buildx
 	docker buildx build --platform=${PLATFORMS} $(OUTPUT) --progress=$(PROGRESS) -t ${IMAGE} --pull $(EXTRA_BUILD_OPT) .
 
+localbuild:
+	docker build -t ${IMAGE} .
 # push the cross built image
 push: OUTPUT=--push
 push: build

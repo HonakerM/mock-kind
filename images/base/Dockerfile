@@ -19,27 +19,12 @@
 
 # start from ubuntu, this image is reasonably small as a starting point
 # for a kubernetes node image, it doesn't contain much we don't need
+
 ARG BASE_IMAGE=ubuntu:22.04
 FROM $BASE_IMAGE as build
 
 # `docker buildx` automatically sets this arg value
 ARG TARGETARCH
-
-# Configure containerd and runc binaries from kind-ci/containerd-nightlies repository
-# The repository contains latest stable releases and nightlies built for multiple architectures
-ARG CONTAINERD_VERSION="1.6.9"
-ARG CONTAINERD_BASE_URL="https://github.com/kind-ci/containerd-nightlies/releases/download"
-ARG CONTAINERD_URL="${CONTAINERD_BASE_URL}/containerd-${CONTAINERD_VERSION}/containerd-${CONTAINERD_VERSION}-linux-${TARGETARCH}.tar.gz"
-ARG CONTAINERD_AMD64_SHA256SUM="9bbc3bb338b7a12c6a1d05e32dcb442d5caf809ca14d96e97822a7cba79d710e"
-ARG CONTAINERD_ARM64_SHA256SUM="3a4c2e302a00970c1c13ca721ba0d8c10ee08f257a926766655ac2724a68988a"
-ARG CONTAINERD_PPC64LE_SHA256SUM="69d1b4ab4a56e42d47c6d2d4d58e06e8f3dfc99094e2e40b354879ba97d49bee"
-ARG CONTAINERD_S390X_SHA256SUM="631eb055a66485b2f6b5903620d265602e30759ac102115a4b3f1cce666475f8"
-
-ARG RUNC_URL="${CONTAINERD_BASE_URL}/containerd-${CONTAINERD_VERSION}/runc.${TARGETARCH}"
-ARG RUNC_AMD64_SHA256SUM="82710042741bbe86088ac0658c93ff7131f7b5ae68fa3fdea5a362db91c521b5"
-ARG RUNC_ARM64_SHA256SUM="21924dfdbe8a72589857799ee9a996a24f06972530823bc8f62d13d79efb42af"
-ARG RUNC_PPC64LE_SHA256SUM="de090ecf7ec9eff774f2b2c50703a01472642dbe38652dad467b621d7f0b0d9e"
-ARG RUNC_S390X_SHA256SUM="a7fb998a7598d615a816303583ff88ffa3aa2ca6841a59e21474d342c2a453ed"
 
 # Configure crictl binary from upstream
 ARG CRICTL_VERSION="v1.25.0"
@@ -58,27 +43,20 @@ ARG CNI_PLUGINS_ARM64_SHA256SUM="16484966a46b4692028ba32d16afd994e079dc2cc63fbc2
 ARG CNI_PLUGINS_PPC64LE_SHA256SUM="1551259fbfe861d942846bee028d5a85f492393e04bcd6609ac8aaa7a3d71431"
 ARG CNI_PLUGINS_S390X_SHA256SUM="767c6b2f191a666522ab18c26aab07de68508a8c7a6d56625e476f35ba527c76"
 
-# Configure containerd-fuse-overlayfs snapshotter binary from upstream
-ARG CONTAINERD_FUSE_OVERLAYFS_VERSION="1.0.4"
-ARG CONTAINERD_FUSE_OVERLAYFS_TARBALL="v${CONTAINERD_FUSE_OVERLAYFS_VERSION}/containerd-fuse-overlayfs-${CONTAINERD_FUSE_OVERLAYFS_VERSION}-linux-${TARGETARCH}.tar.gz"
-ARG CONTAINERD_FUSE_OVERLAYFS_URL="https://github.com/containerd/fuse-overlayfs-snapshotter/releases/download/${CONTAINERD_FUSE_OVERLAYFS_TARBALL}"
-ARG CONTAINERD_FUSE_OVERLAYFS_AMD64_SHA256SUM="228417cc97fea4df26ed85182443ee4d5799f65ada0b3ce663bf7e6bc8920f6b"
-ARG CONTAINERD_FUSE_OVERLAYFS_ARM64_SHA256SUM="5ede755ff8fe2cb3e38b59d7eb005ccc29a88037a2fa5f7749d28471ee81c727"
-ARG CONTAINERD_FUSE_OVERLAYFS_PPC64LE_SHA256SUM="cd4775b6de118bc3bc83efb89e4303c96c602b86d63f2df4a083f48e968c171d"
-ARG CONTAINERD_FUSE_OVERLAYFS_S390X_SHA256SUM="55dae4a2c74b1215ec99591b9197e6a651bfcc6f96b4cc0331537fba5411eadc"
-
 # copy in static files
 # all scripts are 0755 (rwx r-x r-x)
-COPY --chmod=0755 files/usr/local/bin/* /usr/local/bin/
+COPY  files/usr/local/bin/* /usr/local/bin/
+RUN chmod -R 0755 /usr/local/bin/
 
 # all configs are 0644 (rw- r-- r--)
-COPY --chmod=0644 files/etc/* /etc/
-COPY --chmod=0644 files/etc/containerd/* /etc/containerd/
-COPY --chmod=0644 files/etc/default/* /etc/default/
-COPY --chmod=0644 files/etc/sysctl.d/* /etc/sysctl.d/
-COPY --chmod=0644 files/etc/systemd/system/* /etc/systemd/system/
-COPY --chmod=0644 files/etc/systemd/system/kubelet.service.d/* /etc/systemd/system/kubelet.service.d/
+COPY files/etc/* /etc/
+COPY files/etc/containerd/* /etc/containerd/
+COPY files/etc/default/* /etc/default/
+COPY files/etc/sysctl.d/* /etc/sysctl.d/
+COPY files/etc/systemd/system/* /etc/systemd/system/
+COPY files/etc/systemd/system/kubelet.service.d/* /etc/systemd/system/kubelet.service.d/
 
+RUN chmod -R 0644 /etc/
 # Install dependencies, first from apt, then from release tarballs.
 # NOTE: we use one RUN to minimize layers.
 #
@@ -130,32 +108,14 @@ RUN echo "Installing Packages ..." \
 RUN echo "Enabling kubelet ... " \
     && systemctl enable kubelet.service
 
-RUN echo "Installing containerd ..." \
-    && curl -sSL --retry 5 --output /tmp/containerd.${TARGETARCH}.tgz "${CONTAINERD_URL}" \
-    && echo "${CONTAINERD_AMD64_SHA256SUM}  /tmp/containerd.amd64.tgz" | tee /tmp/containerd.sha256 \
-    && echo "${CONTAINERD_ARM64_SHA256SUM}  /tmp/containerd.arm64.tgz" | tee -a /tmp/containerd.sha256 \
-    && echo "${CONTAINERD_PPC64LE_SHA256SUM}  /tmp/containerd.ppc64le.tgz" | tee -a /tmp/containerd.sha256 \
-    && echo "${CONTAINERD_S390X_SHA256SUM}  /tmp/containerd.s390x.tgz" | tee -a /tmp/containerd.sha256 \
-    && sha256sum --ignore-missing -c /tmp/containerd.sha256 \
-    && rm -f /tmp/containerd.sha256 \
-    && tar -C /usr/local -xzvf /tmp/containerd.${TARGETARCH}.tgz \
-    && rm -rf /tmp/containerd.${TARGETARCH}.tgz \
-    && rm -f /usr/local/bin/containerd-stress /usr/local/bin/containerd-shim-runc-v1 \
-    && curl -sSL --retry 5 --output /tmp/runc.${TARGETARCH} "${RUNC_URL}" \
-    && echo "${RUNC_AMD64_SHA256SUM}  /tmp/runc.amd64" | tee /tmp/runc.sha256 \
-    && echo "${RUNC_ARM64_SHA256SUM}  /tmp/runc.arm64" | tee -a /tmp/runc.sha256 \
-    && echo "${RUNC_PPC64LE_SHA256SUM}  /tmp/runc.ppc64le" | tee -a /tmp/runc.sha256 \
-    && echo "${RUNC_S390X_SHA256SUM}  /tmp/runc.s390x" | tee -a /tmp/runc.sha256 \
-    && sha256sum --ignore-missing -c /tmp/runc.sha256 \
-    && mv /tmp/runc.${TARGETARCH} /usr/local/sbin/runc \
-    && chmod 755 /usr/local/sbin/runc \
-    && ctr oci spec \
-        | jq '.hooks.createContainer[.hooks.createContainer| length] |= . + {"path": "/usr/local/bin/mount-product-files"}' \
-        | jq 'del(.process.rlimits)' \
-        > /etc/containerd/cri-base.json \
-    && containerd --version \
-    && runc --version \
-    && systemctl enable containerd
+# INSTALL Mock Crio
+COPY --from=mockcrio:latest /usr/local/bin/crio /usr/local/bin/crio
+COPY --from=mockcrio:latest /usr/local/bin/crio-status /usr/local/bin/crio-status
+COPY --from=mockcrio:latest /usr/local/lib/systemd/system/crio.service /etc/systemd/system/crio.service
+
+RUN echo "Enabling mock crio ... " \
+    && systemctl enable crio.service
+
 
 RUN echo "Installing crictl ..." \
     && curl -sSL --retry 5 --output /tmp/crictl.${TARGETARCH}.tgz "${CRICTL_URL}" \
