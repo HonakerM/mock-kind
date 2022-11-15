@@ -1,1 +1,0 @@
-This directory contains tools to verify the state and quality of the repo.
