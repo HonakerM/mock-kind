@@ -1,3 +1,5 @@
+
+---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -28,10 +30,13 @@ spec:
       - name: logs-volume
         hostPath:
           path: /var/log
+      - name: containerd-volume
+        hostPath:
+          path: /run/containerd/containerd.sock
       containers:
       - name: hollow-kubelet
-        imagePullPolicy: Always
-        image: kerlydockerid/kubemark-hollow-image
+        imagePullPolicy: IfNotPresent
+        image: kubemark:internal
         ports:
         - containerPort: 4194
         - containerPort: 10250
@@ -54,6 +59,8 @@ spec:
           readOnly: true
         - name: logs-volume
           mountPath: /var/log
+        - name: containerd-volume
+          mountPath: /run/containerd/containerd.sock
         resources:
           requests:
             cpu: 20m
@@ -61,8 +68,8 @@ spec:
         securityContext:
           privileged: true
       - name: hollow-proxy
-        imagePullPolicy: Always
-        image: kerlydockerid/kubemark-hollow-image
+        imagePullPolicy: IfNotPresent
+        image: kubemark:internal
         env:
         - name: NODE_NAME
           valueFrom:
@@ -74,7 +81,7 @@ spec:
         - --morph=proxy
         - --name=$(NODE_NAME)
         - --use-real-proxier=false
-        - --kubeconfig=/kubeconfig/kubeproxy.kubeconfig
+        - --kubeconfig=/kubeconfig/kubelet.kubeconfig
         - --v=2
         volumeMounts:
         - name: kubeconfig-volume
