@@ -61,7 +61,7 @@ make node
 ## FootNote
 
 ### Pulling from a Private Registry
-If you'd like to pull from a private registry first generate a [kubernetes auth config json file](https://kubernetes.io/docs/concepts/containers/images/#config-json) and save it somewhere locally. Then update the [private-registry-config.yaml](private-registry-config.yaml) with the path of your saved config file. Finally when running `make kind` override the `KIND_CONFIG_FILE` to point to the updated config file like the following:
+If you'd like to pull from a private registry first generate a [kubernetes auth config json file](https://kubernetes.io/docs/concepts/containers/images/#config-json) and save it somewhere locally. Then run the `make` command located below to update the kubernetes control plane's docker auth config. Kubernetes will now use your auth file for any image pull's it requires.
 ```
-make kind KIND_CONFIG_FILE=private-registry-config.yaml
+make secret.load <path-to-kube-config>
 ```

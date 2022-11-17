@@ -1,4 +1,7 @@
-.PHONY: kind setup tmpdir
+
+ifeq (secret.load,$(firstword $(MAKECMDGOALS)))
+  RUN_ARGS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
+endif
 
 ROOT:=$(shell pwd)
 TMPDIR:=${ROOT}/.tmp
@@ -12,8 +15,13 @@ kind:
 tmpdir:
 	mkdir -p ${TMPDIR}
 
-ARCH?=amd64
-OS?=linux
+ifeq ($(uname_p),x86_64)
+ARCH:=amd64
+endif
+ifeq ($(uname_p),aarch64)
+ARCH:=arm64
+endif
+OS?=$(shell bash -c "uname  | tr '[:upper:]' '[:lower:]'")
 OPERATOR_SDK_DL_URL:=https://github.com/operator-framework/operator-sdk/releases/download/v1.25.1
 get_operator_sdk: tmpdir
 	echo "Downloading Operator SDK"
@@ -61,6 +69,10 @@ image.push:
 image.load:
 	kind load docker-image ${KUBEMARK_IMAGE} 
 
+secret.load:
+	docker cp  ${RUN_ARGS} kind-control-plane:/var/lib/kubelet/config.json
+
+
 KUBECONFIG?=${TMPDIR}/kubeconfig.yaml
 exportconfig: tmpdir
 	echo "Exporting kind config to ${KUBECONFIG}"
@@ -69,5 +81,10 @@ exportconfig: tmpdir
 NODE_RESOURCE?=${ROOT}/hollow-node.yaml
 node: tmpdir
 	echo "kind: Namespace\napiVersion: v1\nmetadata:\n  name: hollow" | kubectl apply -f -
-	echo "kind: Secret\napiVersion: v1\nmetadata:\n  name: kubeconfig\n  namespace: hollow\ndata:\n  kubelet.kubeconfig: $(shell cat ${KUBECONFIG} | base64 -w 0)" | kubectl apply -f -
+	kubectl create secret generic kubeconfig --type=Opaque --namespace hollow --from-file=kubelet.kubeconfig=${KUBECONFIG}
 	kubectl apply -f ${NODE_RESOURCE}
+
+
+$(eval $(RUN_ARGS):;@:)
+
+.PHONY: kind $(MAKECMDGOALS)
