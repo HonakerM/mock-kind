@@ -2,6 +2,9 @@
 ifeq (secret.load,$(firstword $(MAKECMDGOALS)))
   RUN_ARGS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
 endif
+ifeq  (lock.resource,$(firstword $(MAKECMDGOALS)))
+  RUN_ARGS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
+endif
 
 ROOT:=$(shell pwd)
 TMPDIR:=${ROOT}/.tmp
@@ -21,6 +24,7 @@ endif
 ifeq ($(uname_m),aarch64)
 ARCH:=arm64
 endif
+ARCH?=amd64
 OS?=$(shell bash -c "uname  | tr '[:upper:]' '[:lower:]'")
 OPERATOR_SDK_DL_URL:=https://github.com/operator-framework/operator-sdk/releases/download/v1.25.1
 get_operator_sdk: tmpdir
@@ -64,9 +68,13 @@ lock:
 	bash -c "${ROOT}/lock_cluster.sh"
 	kubectl taint nodes kind-control-plane spoofed=true:NoSchedule
 
+unlock:
+	kubectl taint nodes --all spoofed=true:NoSchedule
+	kubectl taint nodes kind-control-plane spoofed=true:NoSchedule-
+
 KUBEMARK_IMAGE?=kubemark:internal
 image:
-	docker build --tag ${KUBEMARK_IMAGE} .
+	docker build --tag ${KUBEMARK_IMAGE} --build-arg VERSION=${KUBE_VERSION} .
 
 image.push:
 	docker push ${KUBEMARK_IMAGE}
