@@ -60,7 +60,7 @@ fix.catalog:
 	${ROOT}/scripts/fix_security_pod.sh $(shell  bash -c "kubectl get pods | grep 'catalog' | grep -v 'Running' | cut -d ' ' -f 1")
 
 fix.operator:
-	${ROOT}/scripts/fix_security_pod.sh $(shell  bash -c "kubectl get pods | grep 'operator' | grep -v 'catalog' | grep -v 'Running' | cut -d ' ' -f 1")
+	${ROOT}/scripts/fix_security_deployment.sh $(shell  bash -c "kubectl get deployment | grep '0' | cut -d ' ' -f 1")
 
 fix.permissions:
 	${ROOT}/scripts/fix_permissions.sh
