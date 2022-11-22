@@ -2,9 +2,6 @@
 ifeq (secret.load,$(firstword $(MAKECMDGOALS)))
   RUN_ARGS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
 endif
-ifeq  (lock.resource,$(firstword $(MAKECMDGOALS)))
-  RUN_ARGS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
-endif
 
 ROOT:=$(shell pwd)
 TMPDIR:=${ROOT}/.tmp
@@ -60,21 +57,14 @@ nfsstorageclass_install:
 setup: tmpdir olm_install certmanager_install nfsserver_install nfsstorageclass_install
 
 
-NAMESPACE?=$(shell bash -c 'kubectl get sa -ojsonpath="{.items[0].metadata.namespace}"')
-FAILING_CS_PODS?=$(shell bash -c "kubectl get pods | grep 'catalog' | grep -v 'Running' | awk '{print $1}'")
-SERVICE_ACCOUNTS?=$(shell bash -c 'kubectl get sa -ojsonpath="{range .items[*]}{.metadata.name}{\" \"}"');
 fix.csv:
-	for pod in "${FAILING_CS_PODS}" ; do \
-         	kubectl get pod $$pod -o json | jq 'del(.status, (.metadata | .creationTimestamp, .ownerReferences, .resourceVersion, .uid), .spec.containers[0].securityContext, .spec.securityContext)| .metadata.name="\(.metadata.generateName)static"|.spec.securityContext.runAsNonRoot=false|.spec.securityContext.runAsUser=0' | kubectl apply -f - ;\
-	done
+	${ROOT}/scripts/fix_csv.sh
 
 fix.permissions:
-	for sa in "${SERVICE_ACCOUNTS}" do \
-	  kubectl create clusterrolebinding  $$sa-cluster-admin --clusterrole=cluster-admin --serviceaccount=${NAMESPACE}:$$sa ;\
-	done
+	${ROOT}/scripts/fix_permissions.sh
 
 lock:
-	bash -c "${ROOT}/lock_cluster.sh"
+	bash -c "${ROOT}/scripts/lock_cluster.sh"
 	kubectl taint nodes kind-control-plane spoofed=true:NoSchedule
 
 unlock:
