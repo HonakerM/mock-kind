@@ -7,7 +7,7 @@ ROOT:=$(shell pwd)
 TMPDIR:=${ROOT}/.tmp
 
 KIND_CONFIG_FILE?="${ROOT}/default-config.yaml"
-KUBE_VERSION?="v1.25.3"
+KUBE_VERSION?="v1.24.3"
 kind:
 	kind delete cluster
 	kind create cluster --image kindest/node:${KUBE_VERSION} --config ${KIND_CONFIG_FILE}
@@ -15,10 +15,10 @@ kind:
 tmpdir:
 	mkdir -p ${TMPDIR}
 
-ifeq ($(uname_p),x86_64)
+ifeq ($(uname_m),x86_64)
 ARCH:=amd64
 endif
-ifeq ($(uname_p),aarch64)
+ifeq ($(uname_m),aarch64)
 ARCH:=arm64
 endif
 OS?=$(shell bash -c "uname  | tr '[:upper:]' '[:lower:]'")
@@ -54,7 +54,12 @@ nfsstorageclass_install:
 	kubectl patch storageclass standard -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"false"}}}'
 
 setup: tmpdir olm_install certmanager_install nfsserver_install nfsstorageclass_install
-	
+
+fix.csv:
+	for pod in $(kubectl get pods | grep "CrashBackLoop" | awk '{print $1}') ; do \
+    	kubectl get pod $pod -o json | jq '.metadata.generateName as $basename| del(.status, (.metadata | .creationTimestamp, .ownerReferences, .resourceVersion, .uid), .spec.containers[0].securityContext, .spec.securityContext)| .metadata.name="($basename)static"|.spec.securityContext.runAsNonRoot=false|.spec.securityContext.runAsUser=0' | kc apply -f -
+	done
+
 lock:
 	bash -c "${ROOT}/lock_cluster.sh"
 	kubectl taint nodes kind-control-plane spoofed=true:NoSchedule
