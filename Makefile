@@ -59,9 +59,18 @@ nfsstorageclass_install:
 
 setup: tmpdir olm_install certmanager_install nfsserver_install nfsstorageclass_install
 
+
+NAMESPACE?=$(shell bash -c 'kubectl get sa -ojsonpath="{.items[0].metadata.namespace}"')
+FAILING_CS_PODS?=$(shell bash -c "kubectl get pods | grep 'catalog' | grep -v 'Running' | awk '{print $1}'")
+SERVICE_ACCOUNTS?=$(shell bash -c 'kubectl get sa -ojsonpath="{range .items[*]}{.metadata.name}{\" \"}"');
 fix.csv:
-	for pod in $(kubectl get pods | grep "CrashBackLoop" | awk '{print $1}') ; do \
-    	kubectl get pod $pod -o json | jq '.metadata.generateName as $basename| del(.status, (.metadata | .creationTimestamp, .ownerReferences, .resourceVersion, .uid), .spec.containers[0].securityContext, .spec.securityContext)| .metadata.name="($basename)static"|.spec.securityContext.runAsNonRoot=false|.spec.securityContext.runAsUser=0' | kc apply -f -
+	for pod in "${FAILING_CS_PODS}" ; do \
+         	kubectl get pod $$pod -o json | jq 'del(.status, (.metadata | .creationTimestamp, .ownerReferences, .resourceVersion, .uid), .spec.containers[0].securityContext, .spec.securityContext)| .metadata.name="\(.metadata.generateName)static"|.spec.securityContext.runAsNonRoot=false|.spec.securityContext.runAsUser=0' | kubectl apply -f - ;\
+	done
+
+fix.permissions:
+	for sa in "${SERVICE_ACCOUNTS}" do \
+	  kubectl create clusterrolebinding  $$sa-cluster-admin --clusterrole=cluster-admin --serviceaccount=${NAMESPACE}:$$sa ;\
 	done
 
 lock:
