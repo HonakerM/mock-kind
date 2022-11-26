@@ -8,6 +8,7 @@ metadata:
 spec:
   replicas: 3
   serviceName: hollow-node
+  podManagementPolicy: "Parallel"
   selector:
     matchLabels:
       name: hollow-node
@@ -53,6 +54,10 @@ spec:
         - --name=$(NODE_NAME)
         - --kubeconfig=/kubeconfig/kubelet.kubeconfig
         - --v=2
+        - --extended-resources=cpu=64
+        - --extended-resources=memory=256G
+        - --extended-resources=ephemeral-storage=1T
+        - --max-pods=256
         volumeMounts:
         - name: kubeconfig-volume
           mountPath: /kubeconfig

@@ -1,4 +1,3 @@
-
 ifeq (secret.load,$(firstword $(MAKECMDGOALS)))
   RUN_ARGS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
 endif
@@ -6,8 +5,9 @@ endif
 ROOT:=$(shell pwd)
 TMPDIR:=${ROOT}/.tmp
 
+### Cluster setup
 KIND_CONFIG_FILE?="${ROOT}/default-config.yaml"
-KUBE_VERSION?="v1.24.3"
+KUBE_VERSION?=v1.24.3
 kind:
 	kind delete cluster
 	kind create cluster --image kindest/node:${KUBE_VERSION} --config ${KIND_CONFIG_FILE}
@@ -15,6 +15,8 @@ kind:
 tmpdir:
 	mkdir -p ${TMPDIR}
 
+
+### Cluster Configuration
 ifeq ($(uname_m),x86_64)
 ARCH:=amd64
 endif
@@ -37,6 +39,7 @@ certmanager_install:
 	echo "Installing Cert Manager"
 	kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.10.0/cert-manager.yaml
 
+
 nfsserver_install:
 	echo "Setting Up NFS Server"
 	docker exec -t kind-control-plane bash -c " \
@@ -56,23 +59,25 @@ nfsstorageclass_install:
 
 setup: tmpdir olm_install certmanager_install nfsserver_install nfsstorageclass_install
 
-fix.catalog:
-	${ROOT}/scripts/fix_security_pod.sh $(shell  bash -c "kubectl get pods | grep 'catalog' | grep -v 'Running' | cut -d ' ' -f 1")
+### Scheduler Funcitions and Image
+SCHEDULER_IMAGE?=spoofed-scheduler:internal
+scheduler:
+	cd scheduler && \
+	make build IMAGE_NAME=${SCHEDULER_IMAGE}
 
-fix.operator:
-	${ROOT}/scripts/fix_security_deployment.sh $(shell  bash -c "kubectl get deployment | grep '0' | cut -d ' ' -f 1")
+scheduler.push:
+	docker push ${SCHEDULER_IMAGE}
 
-fix.permissions:
-	${ROOT}/scripts/fix_permissions.sh
+scheduler.load:
+	kind load docker-image ${SCHEDULER_IMAGE} 
 
-lock:
-	bash -c "${ROOT}/scripts/lock_cluster.sh"
-	kubectl taint nodes kind-control-plane spoofed=true:NoSchedule
+scheduler.install:
+	docker exec -t kind-control-plane bash -c " \
+		sed -i 's/k8s.gcr.io\/kube-scheduler:${KUBE_VERSION}/${SCHEDULER_IMAGE}/g' /etc/kubernetes/manifests/kube-scheduler.yaml &&\
+		sed -i 's/- kube-scheduler/- \/kube-scheduler\n    - --config=\/etc\/kubernetes\/custom-scheduler.conf/g' /etc/kubernetes/manifests/kube-scheduler.yaml \
+	"
 
-unlock:
-	kubectl taint nodes --all spoofed=true:NoSchedule
-	kubectl taint nodes kind-control-plane spoofed=true:NoSchedule-
-
+### KubeMark Fucntion and  Image
 KUBEMARK_IMAGE?=kubemark:internal
 image:
 	docker build --tag ${KUBEMARK_IMAGE} --build-arg VERSION=${KUBE_VERSION} .
@@ -83,22 +88,34 @@ image.push:
 image.load:
 	kind load docker-image ${KUBEMARK_IMAGE} 
 
-secret.load:
-	docker cp  ${RUN_ARGS} kind-control-plane:/var/lib/kubelet/config.json
-
-
+### Hollow Node Setup
 KUBECONFIG?=${TMPDIR}/kubeconfig.yaml
 exportconfig: tmpdir
 	echo "Exporting kind config to ${KUBECONFIG}"
 	kind get kubeconfig --internal > ${KUBECONFIG}
 
+secret.load:
+	docker cp  ${RUN_ARGS} kind-control-plane:/var/lib/kubelet/config.json
+
+### Hollow Node Start
 NODE_RESOURCE?=${ROOT}/hollow-node.yaml
 node: tmpdir
-	echo "kind: Namespace\napiVersion: v1\nmetadata:\n  name: hollow" | kubectl apply -f -
-	kubectl create secret generic kubeconfig --type=Opaque --namespace hollow --from-file=kubelet.kubeconfig=${KUBECONFIG}
-	kubectl apply -f ${NODE_RESOURCE}
+	${ROOT}/scripts/start_node.sh ${KUBECONFIG} ${NODE_RESOURCE}
+	
+node.uninstall:
+	kubectl delete secret kubeconfig --namespace hollow || true
+	kubectl delete -f ${NODE_RESOURCE} || true
+	kubectl delete  $(shell kubectl get nodes --field-selector='metadata.name!=kind-control-plane' -oname) || true
 
+### Helper Hacks to fix pods meant for openshift
+fix.catalog:
+	${ROOT}/scripts/fix_security_pod.sh $(shell  bash -c "kubectl get pods | grep 'catalog' | grep -v 'Running' | cut -d ' ' -f 1")
+
+fix.operator:
+	${ROOT}/scripts/fix_security_deployment.sh $(shell  bash -c "kubectl get deployment | grep '0' | cut -d ' ' -f 1")
+
+fix.permissions:
+	${ROOT}/scripts/fix_permissions.sh
 
 $(eval $(RUN_ARGS):;@:)
-
 .PHONY: kind $(MAKECMDGOALS)
