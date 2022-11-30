@@ -27,22 +27,16 @@ func mutateCreate() admissioncontroller.AdmitFunc {
 
 		// if RunAsNonRoot is set but no user supplied then generate random user id
 		psc := pod.Spec.SecurityContext
-		if psc.RunAsNonRoot!=nil && *psc.RunAsNonRoot == true {
-			operations = append(operations, admissioncontroller.ReplacePatchOperation("/spec/securityContext/runAsNonRoot", false))
-
-			//manual fix for catalgo
-			if psc.RunAsUser!=nil && *psc.RunAsUser == 1001 {
-				operations = append(operations, admissioncontroller.ReplacePatchOperation("/spec/securityContext/runAsUser", 0))
-			}
+		if psc.RunAsNonRoot!=nil  {
+			operations = append(operations, admissioncontroller.RemovePatchOperation("/spec/securityContext"))
 		}
 
 		var containers []v1.Container
 		for _, container := range pod.Spec.Containers {
 			new_container := container.DeepCopy()
-			csc := container.SecurityContext 
-			if csc.RunAsNonRoot!=nil && *csc.RunAsNonRoot == true {
-				updatedRunAsRoot := false
-				new_container.SecurityContext.RunAsNonRoot = &updatedRunAsRoot
+			csc := container.SecurityContext
+			if  csc!=nil && (csc.Privileged==nil || *csc.Privileged==false) {
+				new_container.SecurityContext = nil
 			}
 			containers = append(containers, *new_container)
 		}
