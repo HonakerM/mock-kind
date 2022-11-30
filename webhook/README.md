@@ -1,0 +1,1 @@
+This Folder is based off of this barebones go admissioncontroller: https://github.com/douglasmakey/admissioncontroller

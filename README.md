@@ -10,32 +10,22 @@ This repository assumes you have [kind](https://kind.sigs.k8s.io/docs/user/quick
 
 ## Initial Cluster Setup
 
-To spin up a bare bones kind cluster you can run the following command. The kubernetes version is configurable via the `KUBE_VERSION` (default: v1.25.3) argument. One thing to note is that this will tear down any currently running kind cluster.
+To spin up a bare bones kind cluster you can run the following command. The kubernetes version is configurable via the `KUBE_VERSION` (default: v1.24.3) argument. One thing to note is that this will tear down any currently running kind cluster.
 ```
 make kind
 ```
 
+### Scheduler Install
 
-Once the kind cluster is up you can install the general dependencies using the following make command. This installs cert manager v1.10.0, olm v1.25.1, and configures a nfs storage class to be used by all nodes. 
+As mentioned above `kubemark` adds nodes to the cluster which can cause alot of headaches when trying to schedule resources. This repo's solution was to create a [kubernetes scheduler plugin](https://kubernetes.io/docs/concepts/scheduling-eviction/scheduling-framework/) that controls which pods are scheduled onto the spoofed nodes. It does this by watching the `spoofed` annotations on namespaces. If `spoofed` is set to `true` then all pods in that namespace will be scheduled onto hollow nodes. You can exclude certain pods by using the `spoofed_excluded_pods`  annotation which takes in a list of regex's and will schedule those pods on real nodes. The scheduler filters hollow nodes by the `spoofed=true` annotation which is applied at a later stage. To install the scheduler you must first build its docker image and then load it onto the kind cluster using the following make command:
 ```
-make setup
+make scheduler scheduler.load
+```
+Once the image is in the kind cluster you can install it by running the following make command. Make sure to only run it **once** or else it will corrupt the manifest.
+```
+make scheduler.install
 ```
 
-After setup has completed feel free to deploy any more resources you'll want actually running on the cluster. So things like operators and the like should be installed at this point. 
-
-### Post Setup
-
-Once you have the cluster to your liking its time to lock down the resources to the `kind-control-plane` node. As mentioned above `kubemock` adds nodes to the cluster so any pod scheduled on them is spoofed. To prevent this from happening to pods we want running you have to run the following command. 
-```
-make lock
-```
-This command patches every deployment and statefulset to include the following yaml. This forces all pods to be scheduled on the `kind-control-plane` node regardless of tains or affinities. Then the command taints the node with `spoofed=true:NoSchedule` to force all future pods to utilize other "hollow" nodes.
-```
-spec:
-  template:
-    spec:
-      nodeName: kind-control-plane
-```
 ## Hollowing out Kubernetes
 
 ### Building the Image
@@ -59,6 +49,17 @@ make node
 
 
 ## FootNote
+
+### Openshift Compatibility
+
+Since one of the goals for this project is to speed up the development openshift operators I wanted to try my best to support odlm. Since this uses standard CRD's and kubernetes concepts I thought it would work seamlessly but I ran into an issue with [podSecurityContext](https://kubernetes.io/docs/tasks/configure-pod-container/security-context/). A large amount of resources were setting `spec.securityContext.RunAsNonRoot=true` but were using images that either didn't set a user id or were using a username instead. On openshift this is accetable as the opernshift-api will randomly generate a UID and use it; however, kubernetes just rejects it. To get around this issue I created a mutation webhook that will update resources and assign them a random `runAsUser` value. To install the webhook you must first build it and load it to the kind cluster using the following commands:
+```
+make webhook webhook.load
+```
+Then the webhook can be installed into the `webhook` namespace using the following command:
+```
+make webhook.install
+```
 
 ### Pulling from a Private Registry
 If you'd like to pull from a private registry first generate a [kubernetes auth config json file](https://kubernetes.io/docs/concepts/containers/images/#config-json) and save it somewhere locally. Then run the `make` command located below to update the kubernetes control plane's docker auth config. Kubernetes will now use your auth file for any image pull's it requires.

@@ -71,11 +71,29 @@ scheduler.push:
 scheduler.load:
 	kind load docker-image ${SCHEDULER_IMAGE} 
 
+# Replace this with yq
 scheduler.install:
 	docker exec -t kind-control-plane bash -c " \
 		sed -i 's/k8s.gcr.io\/kube-scheduler:${KUBE_VERSION}/${SCHEDULER_IMAGE}/g' /etc/kubernetes/manifests/kube-scheduler.yaml &&\
 		sed -i 's/- kube-scheduler/- \/kube-scheduler\n    - --config=\/etc\/kubernetes\/custom-scheduler.conf/g' /etc/kubernetes/manifests/kube-scheduler.yaml \
 	"
+
+### Webhook Functions and Image
+WEBHOOK_IMAGE?=spoofed-webhook:internal
+webhook:
+	cd webhook && \
+	make build IMAGE_NAME=${WEBHOOK_IMAGE}
+
+webhook.push:
+	docker push ${WEBHOOK_IMAGE}
+
+webhook.load:
+	kind load docker-image ${WEBHOOK_IMAGE} 
+
+webhook.install:
+	cd webhook && \
+	make install 
+	
 
 ### KubeMark Fucntion and  Image
 KUBEMARK_IMAGE?=kubemark:internal

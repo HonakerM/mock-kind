@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spoofed-webhook-server
+  namespace: webhook
+  labels:
+    app: spoofed-webhook-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: spoofed-webhook-server
+  template:
+    metadata:
+      labels:
+        app: spoofed-webhook-server
+    spec:
+      containers:
+      - name: server
+        image: spoofed-webhook:internal
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8443
+            scheme: HTTPS
+        ports:
+        - containerPort: 8443
+        volumeMounts:
+        - name: tls-certs
+          mountPath: /etc/certs
+          readOnly: true
+      volumes:
+      - name: tls-certs
+        secret:
+          secretName: spoofed-webhook-tls
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: spoofed-webhook
+  namespace: webhook
+spec:
+  selector:
+    app: spoofed-webhook-server
+  ports:
+    - port: 443
+      targetPort: 8443

@@ -19,11 +19,11 @@ kubectl apply -f ${resource}
 
 # wait until nodes are up
 echo "Waiting until nodes are ready"
-until [ $(kubectl get nodes --field-selector="metadata.name!=kind-control-plane" -oname | wc -l) != "0" ];
+until [ $(kubectl get nodes --field-selector="metadata.name!=kind-control-plane" -oname | wc -l) != "$(kubectl get pods -n hollow | wc -l)" ];
 do
     echo "Nodes are not ready waiting 5 more seconds...."
     sleep 5
-    if [ $(kubectl get nodes --field-selector="metadata.name!=kind-control-plane" -oname | wc -l) != "0" ]; then
+    if [ $(kubectl get nodes --field-selector="metadata.name!=kind-control-plane" -oname | wc -l) != "$(kubectl get pods -n hollow | wc -l)" ]; then
         echo "Nodes are Ready!"
         break
     fi
